@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // Fishing Jigsaw — no-rotation, 4×6 board, chest, confirm modals
 
 // ======= Config =======
@@ -217,3 +218,93 @@ resetBtn.addEventListener('click', ()=>{
 });
 
 //
+=======
+// Fishing Jigsaw — no-rotation, 4×6 board, chest, confirm modals
+updateHUD();
+checkWin();
+}
+
+
+function checkWin(){
+if(filled >= CELL_COUNT){
+// Show reward
+rewardSlot.innerHTML = '';
+const img = document.createElement('img');
+img.alt = 'Reward'; img.style.width = '90%'; img.style.height='90%'; img.style.objectFit='contain';
+img.src = ASSETS.reward; // if missing, fallback text
+rewardSlot.appendChild(img);
+confirmModal('Fishing Jigsaw', 'You filled the entire board—nice!');
+}
+}
+
+
+// ======= Mouse handling =======
+boardEl.addEventListener('mousemove', (e)=>{
+if(!holding) return;
+const rect = boardEl.getBoundingClientRect();
+const x = Math.floor((e.clientX - rect.left) / (rect.width / COLS));
+const y = Math.floor((e.clientY - rect.top) / (rect.height / ROWS));
+holding.x = Math.max(0, Math.min(COLS-1, x));
+holding.y = Math.max(0, Math.min(ROWS-1, y));
+// Position ghost snapped to anchor cell
+const cellRect = cells[idx(holding.x, holding.y)].el.getBoundingClientRect();
+const gRect = boardEl.getBoundingClientRect();
+ghostEl.style.left = (cellRect.left - gRect.left) + 'px';
+ghostEl.style.top = (cellRect.top - gRect.top ) + 'px';
+// Scale ghost to grid cells
+ghostEl.style.width = (cellRect.width * holding.piece.w + 2*(holding.piece.w-1)) + 'px';
+ghostEl.style.height= (cellRect.height* holding.piece.h + 2*(holding.piece.h-1)) + 'px';
+// Validity feedback
+ghostEl.classList.toggle('invalid', !canPlaceAt(holding.x, holding.y, holding.piece));
+});
+
+
+boardEl.addEventListener('mouseleave', ()=>{
+if(holding) ghostEl.classList.add('hidden');
+});
+boardEl.addEventListener('mouseenter', ()=>{
+if(holding) ghostEl.classList.remove('hidden');
+});
+
+
+// Left click to attempt placement
+boardEl.addEventListener('click', async (e)=>{
+if(!holding) return;
+const ok = await confirmModal('Do you want to add this?', 'Place this piece here?');
+if(!ok) return;
+if(canPlaceAt(holding.x, holding.y, holding.piece)){
+placeAt(holding.x, holding.y, holding.piece);
+stopHolding();
+} else {
+// Invalid spot feedback
+confirmModal('Invalid placement', 'That piece does not fit there.');
+}
+});
+
+
+// Right click to attempt drop
+window.addEventListener('contextmenu', (e)=>{
+if(holding){ e.preventDefault(); onDropAttempt(); }
+});
+
+
+async function onDropAttempt(){
+const ok = await confirmModal('Do you want to drop this?', 'Discard the current piece?');
+if(ok) stopHolding();
+}
+
+
+// Chest + reset
+chestBtn.addEventListener('click', onChestClick);
+resetBtn.addEventListener('click', ()=>{
+buildBoard();
+stopHolding();
+moves = 0; filled = 0; updateHUD();
+rewardSlot.innerHTML = '<span class="reward-placeholder">Reward</span>';
+});
+
+
+// ======= Init =======
+buildBoard();
+updateHUD();
+>>>>>>> ed52cfc (feat: starter site scaffold)

@@ -1,3 +1,8 @@
+<<<<<<< HEAD
 .DS_Store
 node_modules/
+=======
+.DS_Store
+node_modules/
+>>>>>>> ed52cfc (feat: starter site scaffold)
 *.log

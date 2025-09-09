@@ -75,7 +75,6 @@ body {
   opacity:.6;
   filter: grayscale(0.6) brightness(0.7);
 }
-.hidden { display:none; }
 
 /* Side panel */
 .side .reward-chest {
@@ -154,3 +153,7 @@ body {
     grid-template-rows: repeat(4, 1fr);
   }
 }
+
+/* Ensure modal is hidden initially */
+.hidden { display: none !important; }
+.modal.hidden { display: none !important; }

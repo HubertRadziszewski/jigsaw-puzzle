@@ -1,4 +1,4 @@
-// Fishing Jigsaw — no-rotation, 4×6 board, chest, confirm modals
+// Fishing Jigsaw — ghost follows cursor (centered), sheath shows piece shape
 
 // ======= Config =======
 const COLS = 6, ROWS = 4;
@@ -8,7 +8,7 @@ const ASSETS = {
   reward: 'assets/reward.png',
 };
 
-// Pieces (fixed orientation). LINE3 vertical. Red zig-zag mirrored to match sprite.
+// Pieces (fixed orientation).
 const PIECES = [
   { id: 'O1',   name: '1x1',        w:1, h:1, sprite:'assets/pieces/orange_1x1.png', coords:[[0,0]] },
   { id: 'LINE3',name: '3x1 line',   w:1, h:3, sprite:'assets/pieces/blue_3x1.png',   coords:[[0,0],[0,1],[0,2]] },
@@ -21,6 +21,7 @@ const PIECES = [
 // ======= Elements / State =======
 const boardEl = document.getElementById('board');
 const ghostEl = document.getElementById('ghost');
+const sheathEl = document.getElementById('sheath');
 const chestBtn = document.getElementById('chestBtn');
 const rewardSlot = document.getElementById('rewardSlot');
 const moveCountEl = document.getElementById('moveCount');
@@ -95,12 +96,27 @@ function randomPiece(){ return PIECES[Math.floor(Math.random()*PIECES.length)]; 
 
 function startHolding(piece){
   holding = { piece, x:0, y:0 };
+
+  // get actual cell size from the DOM
+  const firstCell = cells[0].el;
+  const cellW = firstCell.offsetWidth;
+  const cellH = firstCell.offsetHeight;
+  const { colGap, rowGap } = getGridGaps();
+
   ghostEl.style.backgroundImage = `url(${piece.sprite})`;
-  ghostEl.style.width = '0px';
-  ghostEl.style.height = '0px';
+  ghostEl.style.width = (cellW * piece.w + colGap * (piece.w - 1)) + 'px';
+  ghostEl.style.height = (cellH * piece.h + rowGap * (piece.h - 1)) + 'px';
+
   show(ghostEl);
+  show(sheathEl);
 }
-function stopHolding(){ holding = null; hide(ghostEl); }
+
+function stopHolding(){
+  holding = null;
+  hide(ghostEl);
+  hide(sheathEl);
+  sheathEl.innerHTML = '';
+}
 
 // ======= Placement / Rendering =======
 function rectForFootprint(px,py,w,h){
@@ -168,22 +184,67 @@ boardEl.addEventListener('mousemove', (e)=>{
   if(!holding) return;
 
   const rect = boardEl.getBoundingClientRect();
-  const x = Math.floor((e.clientX - rect.left) / (rect.width / COLS));
-  const y = Math.floor((e.clientY - rect.top)  / (rect.height / ROWS));
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  // Ghost follows mouse, centered
+  ghostEl.style.left = (mouseX - ghostEl.offsetWidth/2) + 'px';
+  ghostEl.style.top  = (mouseY - ghostEl.offsetHeight/2) + 'px';
+
+  // Update sheath snapping
+  updateSheath(mouseX, mouseY);
+});
+
+function updateSheath(mouseX, mouseY){
+  if(!holding) return;
+  const piece = holding.piece;
+
+  const firstCell = cells[0]?.el;
+  const cellW = firstCell.offsetWidth;
+  const cellH = firstCell.offsetHeight;
+  const { colGap, rowGap } = getGridGaps();
+
+  const x = Math.floor(mouseX / (cellW + colGap));
+  const y = Math.floor(mouseY / (cellH + rowGap));
+
   holding.x = Math.max(0, Math.min(COLS-1, x));
   holding.y = Math.max(0, Math.min(ROWS-1, y));
 
-  const r = rectForFootprint(holding.x, holding.y, holding.piece.w, holding.piece.h);
-  ghostEl.style.left   = r.left  + 'px';
-  ghostEl.style.top    = r.top   + 'px';
-  ghostEl.style.width  = r.width + 'px';
-  ghostEl.style.height = r.height+ 'px';
+  // Clear old sheath blocks
+  sheathEl.innerHTML = '';
 
-  ghostEl.classList.toggle('invalid', !canPlaceAt(holding.x, holding.y, holding.piece));
-});
+  // Build sheath blocks for each coord of the piece
+  for (const [dx, dy] of piece.coords) {
+    const px = holding.x + dx;
+    const py = holding.y + dy;
 
-boardEl.addEventListener('mouseleave', ()=>{ if(holding) ghostEl.classList.add('hidden'); });
-boardEl.addEventListener('mouseenter', ()=>{ if(holding) ghostEl.classList.remove('hidden'); });
+    if (!inBounds(px, py)) continue;
+
+    const anchor = cells[idx(px,py)].el;
+    const left   = anchor.offsetLeft;
+    const top    = anchor.offsetTop;
+    const width  = anchor.offsetWidth;
+    const height = anchor.offsetHeight;
+
+    const block = document.createElement('div');
+    block.className = 'sheath-cell';
+    block.style.left = left + 'px';
+    block.style.top = top + 'px';
+    block.style.width = width + 'px';
+    block.style.height = height + 'px';
+    sheathEl.appendChild(block);
+  }
+
+  // Validity coloring
+  if (canPlaceAt(holding.x, holding.y, piece)) {
+    sheathEl.classList.remove('invalid');
+  } else {
+    sheathEl.classList.add('invalid');
+  }
+}
+
+boardEl.addEventListener('mouseleave', ()=>{ if(holding) hide(sheathEl); });
+boardEl.addEventListener('mouseenter', ()=>{ if(holding) show(sheathEl); });
 
 boardEl.addEventListener('click', async ()=>{
   if(!holding) return;

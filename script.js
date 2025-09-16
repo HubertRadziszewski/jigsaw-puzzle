@@ -1,4 +1,4 @@
-// Fishing Jigsaw — ghost follows cursor (centered), sheath shows piece shape
+// Fishing Jigsaw — top-left cell–center anchoring, shaped sheath, win OK resets
 
 // ======= Config =======
 const COLS = 6, ROWS = 4;
@@ -55,7 +55,16 @@ function getGridGaps() {
 }
 
 function confirmModal(title, msg){
-  modalTitleEl.textContent = title; modalMsgEl.textContent = msg; show(modalEl);
+  // Standard Yes/No modal (Yes left, No right)
+  modalTitleEl.textContent = title;
+  modalMsgEl.textContent = msg;
+
+  // ensure standard buttons visible & text restored
+  modalNoBtn.style.display = '';
+  modalYesBtn.textContent = 'Yes';
+  modalYesBtn.style.margin = '';
+
+  show(modalEl);
   return new Promise(resolve => {
     const onYes = () => { cleanup(); resolve(true); };
     const onNo  = () => { cleanup(); resolve(false); };
@@ -66,6 +75,33 @@ function confirmModal(title, msg){
     }
     modalYesBtn.addEventListener('click', onYes);
     modalNoBtn.addEventListener('click', onNo);
+  });
+}
+
+function winModal(message){
+  // Special single-button "OK" modal centered
+  modalTitleEl.textContent = 'Congratulations!';
+  modalMsgEl.textContent = message || 'You filled the entire board — nice!';
+
+  modalNoBtn.style.display = 'none';
+  modalYesBtn.textContent = 'OK';
+  modalYesBtn.style.margin = '0 auto'; // center within actions row
+
+  show(modalEl);
+  return new Promise(resolve => {
+    const onYes = () => {
+      cleanup();
+      resolve(true);
+    };
+    function cleanup(){
+      hide(modalEl);
+      modalYesBtn.removeEventListener('click', onYes);
+      // restore defaults for future modals
+      modalNoBtn.style.display = '';
+      modalYesBtn.textContent = 'Yes';
+      modalYesBtn.style.margin = '';
+    }
+    modalYesBtn.addEventListener('click', onYes);
   });
 }
 
@@ -84,6 +120,15 @@ function buildBoard(){
   }
 }
 
+function doReset(){
+  buildBoard();
+  stopHolding();
+  moves = 0; 
+  filled = 0; 
+  updateHUD();
+  rewardSlot.innerHTML = '<span class="reward-placeholder">Reward</span>';
+}
+
 // ======= Chest / Spawn =======
 async function onChestClick(){
   if(holding) return;
@@ -97,14 +142,14 @@ function randomPiece(){ return PIECES[Math.floor(Math.random()*PIECES.length)]; 
 function startHolding(piece){
   holding = { piece, x:0, y:0 };
 
-  // get actual cell size from the DOM
+  // Size ghost to exact footprint using real cell size + gaps
   const firstCell = cells[0].el;
   const cellW = firstCell.offsetWidth;
   const cellH = firstCell.offsetHeight;
   const { colGap, rowGap } = getGridGaps();
 
   ghostEl.style.backgroundImage = `url(${piece.sprite})`;
-  ghostEl.style.width = (cellW * piece.w + colGap * (piece.w - 1)) + 'px';
+  ghostEl.style.width  = (cellW * piece.w + colGap * (piece.w - 1)) + 'px';
   ghostEl.style.height = (cellH * piece.h + rowGap * (piece.h - 1)) + 'px';
 
   show(ghostEl);
@@ -168,14 +213,20 @@ function placeAt(px,py,piece){
   checkWin();
 }
 
-function checkWin(){
+async function checkWin(){
   if(filled >= CELL_COUNT){
     rewardSlot.innerHTML = '';
     const img = document.createElement('img');
-    img.alt = 'Reward'; img.style.width = '90%'; img.style.height='90%'; img.style.objectFit='contain';
+    img.alt = 'Reward'; 
+    img.style.width = '90%'; 
+    img.style.height='90%'; 
+    img.style.objectFit='contain';
     img.src = ASSETS.reward || '';
     rewardSlot.appendChild(img);
-    confirmModal('Fishing Jigsaw', 'You filled the entire board—nice!');
+
+    // Show single-button win popup; after OK, reset board
+    await winModal('You filled the entire board — nice!');
+    doReset();
   }
 }
 
@@ -187,11 +238,15 @@ boardEl.addEventListener('mousemove', (e)=>{
   const mouseX = e.clientX - rect.left;
   const mouseY = e.clientY - rect.top;
 
-  // Ghost follows mouse, centered
-  ghostEl.style.left = (mouseX - ghostEl.offsetWidth/2) + 'px';
-  ghostEl.style.top  = (mouseY - ghostEl.offsetHeight/2) + 'px';
+  // Anchor ghost so cursor is at the CENTER of the piece's top-left cell
+  const firstCell = cells[0].el;
+  const cellW = firstCell.offsetWidth;
+  const cellH = firstCell.offsetHeight;
 
-  // Update sheath snapping
+  ghostEl.style.left = (mouseX - cellW/2) + 'px';
+  ghostEl.style.top  = (mouseY - cellH/2) + 'px';
+
+  // Update sheath snapping (and validity)
   updateSheath(mouseX, mouseY);
 });
 
@@ -210,14 +265,11 @@ function updateSheath(mouseX, mouseY){
   holding.x = Math.max(0, Math.min(COLS-1, x));
   holding.y = Math.max(0, Math.min(ROWS-1, y));
 
-  // Clear old sheath blocks
+  // Rebuild shaped sheath blocks
   sheathEl.innerHTML = '';
-
-  // Build sheath blocks for each coord of the piece
   for (const [dx, dy] of piece.coords) {
     const px = holding.x + dx;
     const py = holding.y + dy;
-
     if (!inBounds(px, py)) continue;
 
     const anchor = cells[idx(px,py)].el;
@@ -273,12 +325,7 @@ async function onDropAttempt(){
 
 // Chest + reset
 chestBtn.addEventListener('click', onChestClick);
-resetBtn.addEventListener('click', ()=>{
-  buildBoard();
-  stopHolding();
-  moves = 0; filled = 0; updateHUD();
-  rewardSlot.innerHTML = '<span class="reward-placeholder">Reward</span>';
-});
+resetBtn.addEventListener('click', doReset);
 
 // ======= Init =======
 buildBoard();

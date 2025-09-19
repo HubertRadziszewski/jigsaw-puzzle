@@ -154,6 +154,7 @@ function startHolding(piece){
 
   show(ghostEl);
   show(sheathEl);
+  ghostEl.classList.add('free'); // allow moving anywhere
 }
 
 function stopHolding(){
@@ -161,6 +162,7 @@ function stopHolding(){
   hide(ghostEl);
   hide(sheathEl);
   sheathEl.innerHTML = '';
+  ghostEl.classList.remove('free'); // reset
 }
 
 // ======= Placement / Rendering =======
@@ -231,22 +233,26 @@ async function checkWin(){
 }
 
 // ======= Mouse handling =======
-boardEl.addEventListener('mousemove', (e)=>{
-  if(!holding) return;
+boardEl.addEventListener('mousemove', (e) => {
+  if (!holding) return;
 
   const rect = boardEl.getBoundingClientRect();
-  const mouseX = e.clientX - rect.left;
-  const mouseY = e.clientY - rect.top;
 
-  // Anchor ghost so cursor is at the CENTER of the piece's top-left cell
+  // Viewport coords for ghost (position:fixed)
+  const clientX = e.clientX;
+  const clientY = e.clientY;
+
+  // Board-local coords for snapping
+  const mouseX = clientX - rect.left;
+  const mouseY = clientY - rect.top;
+
   const firstCell = cells[0].el;
   const cellW = firstCell.offsetWidth;
   const cellH = firstCell.offsetHeight;
 
-  ghostEl.style.left = (mouseX - cellW/2) + 'px';
-  ghostEl.style.top  = (mouseY - cellH/2) + 'px';
+  ghostEl.style.left = (clientX - cellW / 2) + 'px';
+  ghostEl.style.top  = (clientY - cellH / 2) + 'px';
 
-  // Update sheath snapping (and validity)
   updateSheath(mouseX, mouseY);
 });
 
@@ -309,6 +315,32 @@ boardEl.addEventListener('click', async ()=>{
     confirmModal('Invalid placement', 'That piece does not fit there.');
   }
 });
+
+// --- Global move so ghost follows outside the board ---
+function getPoint(e){
+  if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  return { x: e.clientX, y: e.clientY };
+}
+
+document.addEventListener('pointermove', (e) => {
+  if (!holding) return;
+  const pt = getPoint(e);
+  const firstCell = cells[0].el;
+  const cellW = firstCell.offsetWidth;
+  const cellH = firstCell.offsetHeight;
+  ghostEl.style.left = (pt.x - cellW/2) + 'px';
+  ghostEl.style.top  = (pt.y - cellH/2) + 'px';
+}, { passive: false });
+
+document.addEventListener('touchmove', (e) => {
+  if (!holding) return;
+  const pt = getPoint(e);
+  const firstCell = cells[0].el;
+  const cellW = firstCell.offsetWidth;
+  const cellH = firstCell.offsetHeight;
+  ghostEl.style.left = (pt.x - cellW/2) + 'px';
+  ghostEl.style.top  = (pt.y - cellH/2) + 'px';
+}, { passive: false });
 
 // Right click to attempt drop
 window.addEventListener('contextmenu', (e)=>{

@@ -1,4 +1,5 @@
 // Fishing Jigsaw — top-left cell–center anchoring, shaped sheath, win OK resets
+// UPDATE: instant-accurate ghost on spawn via global pointer tracking + startHolding() snap
 
 // ======= Config =======
 const COLS = 6, ROWS = 4;
@@ -14,7 +15,7 @@ const PIECES = [
   { id: 'LINE3',name: '3x1 line',   w:1, h:3, sprite:'assets/pieces/blue_3x1.png',   coords:[[0,0],[0,1],[0,2]] },
   { id: 'S',    name: 'S shape',    w:3, h:2, sprite:'assets/pieces/red_s.png',      coords:[[0,0],[1,0],[1,1],[2,1]] },
   { id: 'SQ2',  name: '2x2 square', w:2, h:2, sprite:'assets/pieces/cyan_2x2.png',   coords:[[0,0],[1,0],[0,1],[1,1]] },
-  { id: 'J',    name: 'J shape',    w:2, h:2, sprite:'assets/pieces/yellow_j.png',   coords:[[0,0],[1,0],[1,1]] }, // mirror of L
+  { id: 'J',    name: 'J shape',    w:2, h:2, sprite:'assets/pieces/yellow_j.png',    coords:[[0,0],[1,0],[1,1]] }, // mirror of L
   { id: 'L',    name: 'L shape',    w:2, h:2, sprite:'assets/pieces/green_l.png',    coords:[[0,0],[0,1],[1,1]] },
 ];
 
@@ -38,6 +39,9 @@ let cells = [];                  // [{el, occupied}]
 let holding = null;              // { piece, x, y }
 let moves = 0;
 let filled = 0;
+
+// NEW: track last pointer globally so we can snap instantly on spawn
+let lastPointer = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 
 // ======= Helpers =======
 function idx(x,y){ return y*COLS + x; }
@@ -85,7 +89,7 @@ function winModal(message){
 
   modalNoBtn.style.display = 'none';
   modalYesBtn.textContent = 'OK';
-  modalYesBtn.style.margin = '0 auto'; // center within actions row
+  modalYesBtn.style.margin = '0 auto';
 
   show(modalEl);
   return new Promise(resolve => {
@@ -96,7 +100,7 @@ function winModal(message){
     function cleanup(){
       hide(modalEl);
       modalYesBtn.removeEventListener('click', onYes);
-      // restore defaults for future modals
+      // restore defaults
       modalNoBtn.style.display = '';
       modalYesBtn.textContent = 'Yes';
       modalYesBtn.style.margin = '';
@@ -155,6 +159,27 @@ function startHolding(piece){
   show(ghostEl);
   show(sheathEl);
   ghostEl.classList.add('free'); // allow moving anywhere
+
+  // NEW: immediately position ghost at the current pointer, no movement required
+  ghostEl.style.left = (lastPointer.x - cellW / 2) + 'px';
+  ghostEl.style.top  = (lastPointer.y - cellH / 2) + 'px';
+
+  // NEW: instantly compute snap/sheath if cursor is over the board
+  const rect = boardEl.getBoundingClientRect();
+  const overBoard =
+    lastPointer.x >= rect.left && lastPointer.x <= rect.right &&
+    lastPointer.y >= rect.top  && lastPointer.y <= rect.bottom;
+
+  if (overBoard) {
+    // board-local coords for snapping
+    const mouseX = lastPointer.x - rect.left;
+    const mouseY = lastPointer.y - rect.top;
+    show(sheathEl);
+    updateSheath(mouseX, mouseY);
+  } else {
+    // cursor is outside board — hide sheath till it enters
+    hide(sheathEl);
+  }
 }
 
 function stopHolding(){
@@ -304,6 +329,7 @@ function updateSheath(mouseX, mouseY){
 boardEl.addEventListener('mouseleave', ()=>{ if(holding) hide(sheathEl); });
 boardEl.addEventListener('mouseenter', ()=>{ if(holding) show(sheathEl); });
 
+// Place on click with confirmation
 boardEl.addEventListener('click', async ()=>{
   if(!holding) return;
   const ok = await confirmModal('Do you want to add this?', 'Place this piece here?');
@@ -323,8 +349,11 @@ function getPoint(e){
 }
 
 document.addEventListener('pointermove', (e) => {
-  if (!holding) return;
   const pt = getPoint(e);
+  // Always remember the last pointer location (even when not holding)
+  lastPointer = pt;
+
+  if (!holding) return;
   const firstCell = cells[0].el;
   const cellW = firstCell.offsetWidth;
   const cellH = firstCell.offsetHeight;
@@ -333,8 +362,11 @@ document.addEventListener('pointermove', (e) => {
 }, { passive: false });
 
 document.addEventListener('touchmove', (e) => {
-  if (!holding) return;
   const pt = getPoint(e);
+  // Keep touch pointer in sync too
+  lastPointer = pt;
+
+  if (!holding) return;
   const firstCell = cells[0].el;
   const cellW = firstCell.offsetWidth;
   const cellH = firstCell.offsetHeight;
